@@ -89,6 +89,8 @@ public class DeviceManager {
             throw new BluetoothException();
         }
 
+        mBluetoothAdapter.cancelDiscovery();
+
         Log.d(TAG, "Scanning services on " + device);
         BluetoothSocket socket = null;
         // TODO why do we have to use this private method to get a reliable
