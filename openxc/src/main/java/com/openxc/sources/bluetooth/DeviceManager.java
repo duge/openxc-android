@@ -19,8 +19,6 @@ import android.bluetooth.BluetoothSocket;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.IntentFilter;
-import android.content.Intent;
 
 import android.util.Log;
 
@@ -141,9 +139,15 @@ public class DeviceManager {
     }
 
     /**
-     * Check the list of previously paired devices and any discoverable devices
-     * for one matching the target address. Once a matching device is found,
-     * calls captureDevice to connect with it.
+     * Check the list of previously paired devices for one matching the target
+     * address. Once a matching device is found, calls captureDevice to connect
+     * with it.
+     *
+     * This will not attempt to pair with unpaired devices - it's assumed that
+     * this step has already been completed by the user when selecting the
+     * Bluetooth device to use. If this class is used programatically with a
+     * hard-coded target address, you'll need to have previously paired the
+     * device.
      */
     private void discoverDevices(final String targetAddress) {
         Log.d(TAG, "Starting device discovery");
