@@ -4,3 +4,5 @@ bin
 .settings
 gen
 .DS_Store
+/com/
+reference

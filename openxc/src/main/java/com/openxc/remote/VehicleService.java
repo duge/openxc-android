@@ -1,15 +1,20 @@
 package com.openxc.remote;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.openxc.DataPipeline;
 
 import com.openxc.remote.VehicleServiceListener;
 
 import com.openxc.sinks.MockedLocationSink;
 import com.openxc.sinks.RemoteCallbackSink;
+import com.openxc.sinks.VehicleDataSink;
 import com.openxc.sources.ApplicationSource;
 
 import com.openxc.sources.DataSourceException;
 import com.openxc.sources.usb.UsbVehicleDataSource;
+import com.openxc.sources.VehicleDataSource;
 import android.app.Service;
 
 import android.content.Context;
@@ -42,11 +47,11 @@ import android.util.Log;
  * application process to the remote service and be indistinguishable from local
  * data sources.
  *
- * This service uses the same {@link DataPipeline} as the {@link VehicleManager}
- * to move data from sources to sinks, but it the pipeline is not modifiable by
- * the application as there is no good way to pass running sources through the
- * AIDL interface. The same style is used here for clarity and in order to share
- * code.
+ * This service uses the same {@link com.openxc.DataPipeline} as the
+ * {@link com.openxc.VehicleManager} to move data from sources to sinks, but it
+ * the pipeline is not modifiable by the application as there is no good way to
+ * pass running sources through the AIDL interface. The same style is used here
+ * for clarity and in order to share code.
  */
 public class VehicleService extends Service {
     private final static String TAG = "VehicleService";
@@ -64,15 +69,6 @@ public class VehicleService extends Service {
         Log.i(TAG, "Service starting");
         mPipeline = new DataPipeline();
         mApplicationSource = new ApplicationSource();
-        try {
-            mUsbDevice = new UsbVehicleDataSource(this);
-        } catch(DataSourceException e) {
-            Log.w(TAG, "Unable to add default USB data source", e);
-        }
-        mController = mUsbDevice;
-
-        initializeDefaultSources();
-        initializeDefaultSinks();
         acquireWakeLock();
     }
 
@@ -88,7 +84,6 @@ public class VehicleService extends Service {
         if(mPipeline != null) {
             mPipeline.stop();
         }
-        mUsbDevice.close();
         releaseWakeLock();
     }
 
@@ -99,8 +94,8 @@ public class VehicleService extends Service {
     public IBinder onBind(Intent intent) {
         Log.i(TAG, "Service binding in response to " + intent);
 
-
         initializeDefaultSources();
+        initializeDefaultSinks();
         return mBinder;
     }
 
@@ -126,7 +121,14 @@ public class VehicleService extends Service {
     private void initializeDefaultSources() {
         mPipeline.clearSources();
         mPipeline.addSource(mApplicationSource);
-        mPipeline.addSource(mUsbDevice);
+
+        try {
+            mUsbDevice = new UsbVehicleDataSource(this);
+            mPipeline.addSource(mUsbDevice);
+            mController = mUsbDevice;
+        } catch(DataSourceException e) {
+            Log.w(TAG, "Unable to add default USB data source", e);
+        }
     }
 
     private final VehicleServiceInterface.Stub mBinder =
@@ -137,7 +139,12 @@ public class VehicleService extends Service {
 
             // TODO should set use a CommandInterface instead of Measurement?
             public void set(RawMeasurement measurement) {
-                mController.set(measurement);
+                if(mController != null) {
+                    mController.set(measurement);
+                } else {
+                    Log.w(TAG, "Unable to set value -- controller is "
+                            + mController);
+                }
             }
 
             public void receive(RawMeasurement measurement) {
@@ -168,6 +175,22 @@ public class VehicleService extends Service {
 
             public int getMessageCount() {
                 return VehicleService.this.getMessageCount();
+            }
+
+            public List<String> getSourceSummaries() {
+                ArrayList<String> sources = new ArrayList<String>();
+                for(VehicleDataSource source : mPipeline.getSources()) {
+                    sources.add(source.toString());
+                }
+                return sources;
+            }
+
+            public List<String> getSinkSummaries() {
+                ArrayList<String> sinks = new ArrayList<String>();
+                for(VehicleDataSink sink : mPipeline.getSinks()) {
+                    sinks.add(sink.toString());
+                }
+                return sinks;
             }
     };
 

@@ -1,6 +1,5 @@
 package com.openxc;
 
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -84,14 +83,15 @@ import com.openxc.util.AndroidFileOpener;
  * The sources of data and any post-processing that happens is controlled by
  * modifying a list of "sources" and "sinks". When a message is received from a
  * data source, it is passed to any and all registered message "sinks" - these
- * receivers conform to the {@link com.openxc.sinks.VehicleDataSinkInterface}.
+ * receivers conform to the {@link com.openxc.sinks.VehicleDataSink}.
  * There will always be at least one sink that stores the latest messages and
  * handles passing on data to users of the VehicleManager class. Other possible
  * sinks include the {@link com.openxc.sinks.FileRecorderSink} which records a
  * trace of the raw OpenXC measurements to a file and a web streaming sink
  * (which streams the raw data to a web application). Other possible sources
- * include the {@link com.openxc.sources.TraceVehicleDataSource} which reads a
- * previously recorded vehicle data trace file and plays back the measurements
+ * include the {@link com.openxc.sources.trace.TraceVehicleDataSource} which
+ * reads a previously recorded vehicle data trace file and plays back the
+ * measurements
  * in real-time.
  *
  * One small inconsistency is that if a Bluetooth data source is added, any
@@ -447,6 +447,61 @@ public class VehicleManager extends Service implements SourceCallback {
         Log.i(TAG, "Adding data source " + source);
         source.setCallback(this);
         mSources.add(source);
+    }
+
+    /**
+     * Return a list of all sources active in the system, suitable for
+     * displaying in a status view.
+     *
+     * This method is soley for being able to peek into the system to see what's
+     * active, which is why it returns strings intead of the actual source
+     * objects. We don't want applications to be able to modify the sources
+     * through this method.
+     *
+     * @return A list of the names and status of all sources.
+     */
+    public List<String> getSourceSummaries() {
+        ArrayList<String> sources = new ArrayList<String>();
+        for(VehicleDataSource source : mSources) {
+            sources.add(source.toString());
+        }
+
+        for(VehicleDataSource source : mPipeline.getSources()) {
+            sources.add(source.toString());
+        }
+
+        if(mRemoteService != null) {
+            try {
+                sources.addAll(mRemoteService.getSourceSummaries());
+            } catch(RemoteException e) {
+                Log.w(TAG, "Unable to retreive remote source summaries", e);
+            }
+
+        }
+        return sources;
+    }
+
+    /**
+     * Return a list of all sinks active in the system.
+     *
+     * The motivation for this method is the same as {@link #getSources}.
+     *
+     * @return A list of the names and status of all sinks.
+     */
+    public List<String> getSinkSummaries() {
+        ArrayList<String> sinks = new ArrayList<String>();
+        for(VehicleDataSink sink : mPipeline.getSinks()) {
+            sinks.add(sink.toString());
+        }
+
+        if(mRemoteService != null) {
+            try {
+                sinks.addAll(mRemoteService.getSinkSummaries());
+            } catch(RemoteException e) {
+                Log.w(TAG, "Unable to retreive remote sink summaries", e);
+            }
+        }
+        return sinks;
     }
 
     /**
