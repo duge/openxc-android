@@ -33,11 +33,15 @@ public class MockedLocationSink extends ContextualVehicleDataSink {
     public final static String VEHICLE_LOCATION_PROVIDER = "vehicle";
 
     private LocationManager mLocationManager;
+    private boolean mOverwriteNativeStatus;
+    private boolean mNativeGpsOverridden;
 
     public MockedLocationSink(Context context) {
         super(context);
         mLocationManager = (LocationManager) getContext().getSystemService(
                 Context.LOCATION_SERVICE);
+        mOverwriteNativeStatus = false;
+        mNativeGpsOverridden = false;
         setupMockLocations();
     }
 
@@ -46,6 +50,30 @@ public class MockedLocationSink extends ContextualVehicleDataSink {
         if(measurement.getName().equals(Latitude.ID) ||
                 measurement.getName().equals(Longitude.ID)) {
             updateLocation();
+        }
+    }
+
+    /**
+     * Enable or disable overwriting Android's native GPS values with those from
+     * the vehicle.
+     *
+     * If enabled, the GPS_PROVIDER from Android will respond with data taken
+     * from the vehicle interface. The native GPS values will be used until GPS
+     * data is actually received from the vehicle, so if the specific car you're
+     * plugged into doesn't have GPS then the values will not be overwritten,
+     * regardless of this setting.
+     */
+    public void setOverwritingStatus(boolean enabled) {
+        mOverwriteNativeStatus = enabled;
+        mNativeGpsOverridden = false;
+        if(mLocationManager != null && !enabled) {
+            try {
+                mLocationManager.removeTestProvider(
+                        LocationManager.GPS_PROVIDER);
+            } catch(IllegalArgumentException e) {
+                Log.d(TAG, "Unable to remove GPS test provider - " +
+                        "probably wasn't added yet");
+            }
         }
     }
 
@@ -62,6 +90,12 @@ public class MockedLocationSink extends ContextualVehicleDataSink {
             return;
         }
 
+        // Only enable overwriting the built-in Android GPS provider if we
+        // actually receive a GPS update from the vehicle. This is to avoid
+        // killing GPS just by having the OpenXC app installed (because it's
+        // always running the serivce in the background).
+        overwriteNativeProvider();
+
         Location location = new Location(LocationManager.GPS_PROVIDER);
         try {
             location.setLatitude(((Number)get(Latitude.ID).getValue()).doubleValue());
@@ -74,8 +108,10 @@ public class MockedLocationSink extends ContextualVehicleDataSink {
         location.setTime(System.currentTimeMillis());
 
         try {
-            mLocationManager.setTestProviderLocation(
-                    LocationManager.GPS_PROVIDER, location);
+            if(mOverwriteNativeStatus) {
+                mLocationManager.setTestProviderLocation(
+                        LocationManager.GPS_PROVIDER, location);
+            }
             location.setProvider(VEHICLE_LOCATION_PROVIDER);
             mLocationManager.setTestProviderLocation(
                     VEHICLE_LOCATION_PROVIDER, location);
@@ -85,13 +121,23 @@ public class MockedLocationSink extends ContextualVehicleDataSink {
         }
     }
 
+    private void overwriteNativeProvider() {
+        if(mOverwriteNativeStatus && !mNativeGpsOverridden) {
+            try {
+                mLocationManager.addTestProvider(LocationManager.GPS_PROVIDER,
+                        false, false, false, false, false, true, false, 0, 5);
+
+                mLocationManager.setTestProviderEnabled(
+                        LocationManager.GPS_PROVIDER, true);
+            } catch(SecurityException e) {
+                Log.w(TAG, "Unable to use mocked locations, " +
+                        "insufficient privileges", e);
+            }
+        }
+    }
+
     private void setupMockLocations() {
         try {
-            mLocationManager.addTestProvider(LocationManager.GPS_PROVIDER,
-                    false, false, false, false, false, true, false, 0, 5);
-            mLocationManager.setTestProviderEnabled(
-                    LocationManager.GPS_PROVIDER, true);
-
             if(mLocationManager.getProvider(
                         VEHICLE_LOCATION_PROVIDER) == null) {
                 mLocationManager.addTestProvider(VEHICLE_LOCATION_PROVIDER,
