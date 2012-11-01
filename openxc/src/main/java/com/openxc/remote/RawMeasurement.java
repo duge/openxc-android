@@ -54,7 +54,7 @@ public class RawMeasurement implements Parcelable {
     }
 
     private RawMeasurement() {
-        mTimestamp = System.nanoTime();
+        timestamp();
     }
 
     public void writeToParcel(Parcel out, int flags) {
@@ -83,7 +83,7 @@ public class RawMeasurement implements Parcelable {
     public String serialize() {
         JSONObject message = JsonSerializer.preSerialize(
                 getName(), getValue(), getEvent());
-        if(!Double.isNaN(getTimestamp())) {
+        if(isTimestamped()) {
             try {
                 message.put(TIMESTAMP_FIELD, getTimestamp());
             } catch(JSONException e) {
@@ -139,8 +139,19 @@ public class RawMeasurement implements Parcelable {
         return mEvent;
     }
 
+    public boolean isTimestamped() {
+        return getTimestamp() != null && !Double.isNaN(getTimestamp());
+    }
     public Double getTimestamp() {
         return mTimestamp;
+    }
+
+    public void timestamp() {
+        mTimestamp = System.currentTimeMillis() / 1000.0;
+    }
+
+    public void untimestamp() {
+    	mTimestamp = Double.NaN;
     }
 
     public int describeContents() {

@@ -13,15 +13,21 @@ instructions](http://openxcplatform.com/getting-started/library-installation.htm
 [usage details](http://openxcplatform.com/android/api-guide.html) and the
 [source code documentation](http://openxcplatform.com/openxc-android).
 
-## Contributing
+## Building from Eclipse
 
-Contributions are welcome - please file issues on
-[GitHub](https://github.com/openxc/openxc-android/issues) if you find any bugs.
-The repository includes a test suite (in the `openxc-it` sub-project) that you
-can use to confirm your fix or feature doesn't break anything else. New test
-cases are highly recommended with any contributions.
+Before importing the projects, make sure Eclipse is set to use the Java 1.6
+compliler compliance level at `Windows -> Preferences -> Java -> Compiler`.
 
-### Building
+Next, go to `File -> Import -> General -> Existing Projects into
+Workspace` and browse to the `openxc-android` repository. At the minimum, import
+the `openxc` folder (the Android library itself) and `openxc-enabler` (the
+Enabler app, required to run OpenXC applications).
+
+You can optionally import the `openxc-examples` project to see an example
+vehicle dashboard OpenXC application, and also the `openxc-it` which contains a
+test suite for the library and instrumentation tests that run on the device.
+
+## Building from Command Line
 
 The build requires [Maven](http://maven.apache.org/download.html)
 v3.0.3+ and the [Android SDK](http://developer.android.com/sdk/index.html)
@@ -32,9 +38,9 @@ the `ANDROID_HOME` environment variable to the location of your SDK:
 
 After satisfying those requirements, the build is pretty simple:
 
-* Run `mvn clean install -pl openxc` from the root directory to build the OpenXC
+* Run `mvn clean install -pl openxc -am` from the root directory to build the OpenXC
   library APK only.
-* Run `mvn clean install -pl openxc,openxc-it` from the root directory to build and run
+* Run `mvn clean install -pl openxc,openxc-it -am` from the root directory to build and run
   the library and test suite. This requires that an Android device is attached or an
   emulator is running.
 
@@ -47,11 +53,9 @@ to deploy the enabler and examples to an attached device:
     $ mvn clean package android:deploy -pl enabler,examples
     $ mvn android:run -pl examples
 
-### Building from Eclipse
+## Contributing
 
-If you have a version of Eclipse with Maven integration (e.g. Indigo for Java
-Developers), you can import the library as an "Existing Maven Project." The
-dependencies will be downloaded automatically.
+Please see our [Contibution Documents](https://github.com/openxc/openxc-android/blob/master/CONTRIBUTING.mkd).
 
 ## License
 
