@@ -77,6 +77,7 @@ public class UsbVehicleDataSource extends ContextualVehicleDataSource
     private final Condition mDeviceChanged;
     private int mVendorId;
     private int mProductId;
+    private MessageParser mParser;
 
     /**
      * Construct an instance of UsbVehicleDataSource with a receiver callback
@@ -144,6 +145,8 @@ public class UsbVehicleDataSource extends ContextualVehicleDataSource
 
         mBuffer = new BytestreamDataSourceMixin();
 
+        mParser = new MessageParser();
+        mParser.start();
         start();
     }
 
@@ -226,16 +229,35 @@ public class UsbVehicleDataSource extends ContextualVehicleDataSource
             if(mConnection != null) {
                 int received = mConnection.bulkTransfer(mInEndpoint, bytes,
                         bytes.length, 0);
+
                 if(received > 0) {
                     mBuffer.receive(bytes, received);
-                    for(String record : mBuffer.parse()) {
-                        handleMessage(record);
-                    }
                 }
             }
             mDeviceConnectionLock.unlock();
         }
         Log.d(TAG, "Stopped USB listener");
+    }
+
+    private class MessageParser extends Thread {
+        private boolean mRunning = true;
+
+        private synchronized boolean isRunning() {
+            return mRunning;
+        }
+
+        public synchronized void done() {
+            Log.d(TAG, "Stopping parser thread");
+            mRunning = false;
+        }
+
+        public void run() {
+            String record;
+            while(isRunning() && (record = mBuffer.readLine()) != null) {
+                handleMessage(record);
+            }
+            Log.d(TAG, "Stopped message parser");
+        }
     }
 
     @Override

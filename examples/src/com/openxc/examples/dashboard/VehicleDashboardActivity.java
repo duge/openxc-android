@@ -73,7 +73,6 @@ public class VehicleDashboardActivity extends Activity {
     private TextView mDoorStatusView;
     private TextView mWiperStatusView;
     private TextView mHeadlampStatusView;
-    StringBuffer mBuffer;
 
     WindshieldWiperStatus.Listener mWiperListener =
             new WindshieldWiperStatus.Listener() {
@@ -448,7 +447,6 @@ public class VehicleDashboardActivity extends Activity {
                 R.id.button_event);
         mDoorStatusView = (TextView) findViewById(
                 R.id.door_status);
-        mBuffer = new StringBuffer();
     }
 
     @Override

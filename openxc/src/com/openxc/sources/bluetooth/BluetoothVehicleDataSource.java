@@ -1,9 +1,8 @@
 package com.openxc.sources.bluetooth;
 
-import java.io.BufferedReader;
+import java.io.BufferedInputStream;
 import java.io.BufferedWriter;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 
 import android.bluetooth.BluetoothSocket;
@@ -13,10 +12,10 @@ import android.util.Log;
 import com.google.common.base.Objects;
 import com.openxc.controllers.VehicleController;
 import com.openxc.remote.RawMeasurement;
+import com.openxc.sources.BytestreamDataSourceMixin;
 import com.openxc.sources.ContextualVehicleDataSource;
 import com.openxc.sources.DataSourceException;
 import com.openxc.sources.SourceCallback;
-import com.openxc.sources.SourceLogger;
 
 /**
  * A vehicle data source reading measurements from an Bluetooth-enabled
@@ -36,9 +35,11 @@ public class BluetoothVehicleDataSource extends ContextualVehicleDataSource
     private boolean mRunning = false;
     private DeviceManager mDeviceManager;
     private BufferedWriter mOutStream;
-    private BufferedReader mInStream;
+    private BufferedInputStream mInStream;
     private BluetoothSocket mSocket;
     private String mAddress;
+    private BytestreamDataSourceMixin mBuffer;
+    private MessageParser mParser;
 
     public BluetoothVehicleDataSource(SourceCallback callback, Context context,
             String address) throws DataSourceException {
@@ -50,6 +51,9 @@ public class BluetoothVehicleDataSource extends ContextualVehicleDataSource
                     "Unable to open Bluetooth device manager", e);
         }
         mAddress = address;
+        mBuffer = new BytestreamDataSourceMixin();
+        mParser = new MessageParser();
+        mParser.start();
         start();
     }
 
@@ -83,10 +87,6 @@ public class BluetoothVehicleDataSource extends ContextualVehicleDataSource
     // TODO this could be made generic so we could use any standard serial
     // device, e.g. xbee or FTDI
     public void run() {
-        double lastLoggedTransferStatsAtByte = 0;
-        double bytesReceived = 0;
-        final long startTime = System.nanoTime();
-        long endTime;
         while(mRunning) {
             try {
                 waitForDeviceConnection();
@@ -100,29 +100,19 @@ public class BluetoothVehicleDataSource extends ContextualVehicleDataSource
                 }
                 continue;
             }
-            String line = null;
+
+            int received;
+            byte[] bytes = new byte[512];
             try {
-                line = mInStream.readLine();
+                received = mInStream.read(bytes, 0, bytes.length);
             } catch(IOException e) {
                 Log.e(TAG, "Unable to read response");
                 disconnect();
                 continue;
             }
 
-            if(line == null){
-                Log.e(TAG, "Device has dropped offline");
-                disconnect();
-                continue;
-            }
-            bytesReceived += line.length();
-            handleMessage(line);
-
-            endTime = System.nanoTime();
-            // log the transfer stats roughly every 1MB
-            if(bytesReceived > lastLoggedTransferStatsAtByte + 1024 * 1024) {
-                lastLoggedTransferStatsAtByte = bytesReceived;
-                SourceLogger.logTransferStats(TAG, startTime, endTime,
-                        bytesReceived);
+            if(received > 0) {
+                mBuffer.receive(bytes, received);
             }
         }
         Log.d(TAG, "Stopped Bluetooth listener");
@@ -135,6 +125,27 @@ public class BluetoothVehicleDataSource extends ContextualVehicleDataSource
             write(message);
         } catch(BluetoothException e) {
             Log.w(TAG, "Unable to write message", e);
+        }
+    }
+
+    private class MessageParser extends Thread {
+        private boolean mRunning = true;
+
+        private synchronized boolean isRunning() {
+            return mRunning;
+        }
+
+        public synchronized void done() {
+            Log.d(TAG, "Stopping parser thread");
+            mRunning = false;
+        }
+
+        public void run() {
+            String record;
+            while(isRunning() && (record = mBuffer.readLine()) != null) {
+                handleMessage(record);
+            }
+            Log.d(TAG, "Stopped message parser");
         }
     }
 
@@ -201,8 +212,7 @@ public class BluetoothVehicleDataSource extends ContextualVehicleDataSource
         try {
             mOutStream = new BufferedWriter(new OutputStreamWriter(
                         mSocket.getOutputStream()));
-            mInStream = new BufferedReader(new InputStreamReader(
-                        mSocket.getInputStream()));
+            mInStream = new BufferedInputStream(mSocket.getInputStream());
             Log.i(TAG, "Socket stream to CAN translator opened successfully");
         } catch(IOException e) {
             Log.e(TAG, "Error opening streams ", e);

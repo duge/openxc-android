@@ -1,10 +1,18 @@
 package com.openxc.sources;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 
 import android.util.Log;
+
+import com.google.common.primitives.Bytes;
 
 /**
  * A "mixin" of sorts to be used with object composition, this contains
@@ -12,11 +20,18 @@ import android.util.Log;
  */
 public class BytestreamDataSourceMixin {
     private final static String TAG = "BytestreamDataSourceMixin";
-    private final static int BUFFER_SIZE = 512;
-    private StringBuilder mBuffer = new StringBuilder(BUFFER_SIZE);
     private double mBytesReceived = 0;
     private double mLastLoggedTransferStatsAtByte = 0;
     private final long mStartTime = System.nanoTime();
+    private BufferedReader mReader;
+    private BlockingQueue<Byte> mCharacterQueue =
+        new ArrayBlockingQueue<Byte>(512);
+
+
+    public BytestreamDataSourceMixin() {
+         mReader = new BufferedReader(new InputStreamReader(
+                     new StringBackedInputStream()));
+    }
 
     /**
      * Add additional bytes to the buffer from the data source.
@@ -26,42 +41,46 @@ public class BytestreamDataSourceMixin {
      *      be read from the array.
      */
     public void receive(byte[] bytes, int length) {
-        // Creating a new String object for each message causes the
-        // GC to go a little crazy, but I don't see another obvious way
-        // of converting the byte[] to something the StringBuilder can
-        // accept (either char[] or String). See #151.
-        String data = new String(bytes, 0, length);
-        mBuffer.append(data);
+        mCharacterQueue.addAll(
+                Bytes.asList(Arrays.copyOfRange(bytes, 0, length)));
         mBytesReceived += length;
 
         logTransferStats();
     }
 
-    /**
-     * Parse the current byte buffer to find messages. Any messages found in the
-     * buffer are removed and returned.
-     *
-     * @returns A list of messages parsed and subsequently removed from the
-     * buffer, if any.
-     */
-    public List<String> parse() {
-        List<String> result;
-        if(mBuffer.indexOf("\n") != -1) {
-            String[] records = mBuffer.toString().split("\n", -1);
-
-            mBuffer = new StringBuilder(BUFFER_SIZE);
-            result = Arrays.asList(records).subList(0, records.length - 1);
-
-            // Preserve any remaining, trailing incomplete messages in the
-            // buffer
-            if(records[records.length - 1].length() > 0) {
-                mBuffer.append(records[records.length - 1]);
+    private class StringBackedInputStream extends InputStream {
+        public int read() {
+            try {
+                return mCharacterQueue.take();
+            } catch(InterruptedException e) {
+                Log.d(TAG, "Interrupted while waiting for a new character");
+                return 0;
             }
-        } else {
-            result = new ArrayList<String>();
         }
 
-        return result;
+        public int read(byte[] buffer, int offset, int length) {
+            List<Byte> dump = new ArrayList<Byte>();
+            try {
+                // use take() so we block until new elements are added
+                dump.add(mCharacterQueue.take());
+            } catch(InterruptedException e) {
+                Log.d(TAG, "Interrupted while waiting for new characters");
+                return -1;
+            }
+
+            mCharacterQueue.drainTo(dump, length - offset - 1);
+            byte[] result = Bytes.toArray(dump);
+            System.arraycopy(result, 0, buffer, offset, result.length);
+            return result.length;
+        }
+    }
+
+    public String readLine() {
+        try {
+            return mReader.readLine();
+        } catch(IOException e) {
+            return null;
+        }
     }
 
     private void logTransferStats() {
