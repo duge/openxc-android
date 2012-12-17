@@ -25,7 +25,7 @@ public class BytestreamDataSourceMixin {
     private final long mStartTime = System.nanoTime();
     private BufferedReader mReader;
     private BlockingQueue<Byte> mCharacterQueue =
-        new ArrayBlockingQueue<Byte>(512);
+        new ArrayBlockingQueue<Byte>(512000);
 
 
     public BytestreamDataSourceMixin() {
@@ -41,8 +41,14 @@ public class BytestreamDataSourceMixin {
      *      be read from the array.
      */
     public void receive(byte[] bytes, int length) {
-        mCharacterQueue.addAll(
-                Bytes.asList(Arrays.copyOfRange(bytes, 0, length)));
+        try {
+            mCharacterQueue.addAll(
+                    Bytes.asList(Arrays.copyOfRange(bytes, 0, length)));
+        } catch(IllegalStateException e) {
+            Log.w(TAG, "Dropping incoming bytes, queue is full");
+            return;
+        }
+
         mBytesReceived += length;
 
         logTransferStats();
